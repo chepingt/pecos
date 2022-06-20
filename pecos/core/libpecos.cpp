@@ -182,6 +182,7 @@ extern "C" {
         const ScipyCscF32 *pM, \
         const ScipyCscF32 *pR, \
         py_coo_allocator_t coo_alloc, \
+        py_coo_allocator_t coo_alloc_alpha, \
         double threshold, \
         uint32_t max_nonzeros_per_label, \
         int solver_type, \
@@ -198,6 +199,7 @@ extern "C" {
         const pecos::csc_t& R = (pR == NULL) ? pecos::csc_t() : pecos::csc_t(pR); \
         pecos::linear_solver::SVMParameter param(solver_type, Cp, Cn, max_iter, eps, bias); \
         pecos::coo_t model; \
+        pecos::coo_t alpha; \
         pecos::linear_solver::multilabel_train_with_codes(\
             &feat_mat, \
             &Y, \
@@ -205,12 +207,14 @@ extern "C" {
             (pM == NULL) ? NULL : &M, \
             (pR == NULL) ? NULL : &R, \
             &model, \
+            &alpha, \
             threshold, \
             max_nonzeros_per_label, \
             &param, \
             threads \
         ); \
         model.create_pycoo(coo_alloc); \
+        alpha.create_pycoo(coo_alloc_alpha); \
     }
     C_XLINEAR_SINGLE_LAYER_TRAIN(_csr_f32, ScipyCsrF32, pecos::csr_t)
     C_XLINEAR_SINGLE_LAYER_TRAIN(_drm_f32, ScipyDrmF32, pecos::drm_t)

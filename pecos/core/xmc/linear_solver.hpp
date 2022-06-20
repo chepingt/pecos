@@ -715,8 +715,13 @@ struct SVMJob {
      * Solve the SVM Problem by the *worker*
      * Store *max_nonzeros* parameters with the absolute value >= *threshold* into  *coo_model*
      * */
-    void solve(svm_worker_t& worker, coo_t& coo_model, double threshold=0.0, uint32_t max_nonzeros=0) const {
+    void solve(svm_worker_t& worker, coo_t& coo_model, coo_t & coo_alpha, double threshold=0.0, uint32_t max_nonzeros=0) const {
         worker.solve(*feat_mat);
+        // coo_alpha
+        for(size_t i = 0; i < worker.y_size; i++) {
+            coo_alpha.push_back(i, subcode, worker.alpha[i]);
+        }
+        // sparsify
         if(max_nonzeros == 0) {
             for(size_t i = 0; i < worker.w_size; i++) {
                 coo_model.push_back(i, subcode, worker.w[i], threshold);
@@ -802,6 +807,7 @@ void multilabel_train_with_codes(
     const csc_t *M,
     const csc_t *R,
     coo_t *model,
+    coo_t *alphas,
     double threshold,
     uint32_t max_nonzeros_per_label,
     SVMParameter *param,
@@ -813,16 +819,18 @@ void multilabel_train_with_codes(
 
     size_t w_size = feat_mat->cols;
     size_t y_size = feat_mat->rows;
-    size_t nr_labels = Y->cols;
+    size_t nr_labels = Y->cols; //L: number of labels
 
     threads = set_threads(threads);
     std::vector<svm_worker_t> worker_set(threads);
     std::vector<coo_t> model_set(threads);
+    std::vector<coo_t> alpha_set(threads);
 
 #pragma omp parallel for schedule(static, 1)
     for(int tid = 0; tid < threads; tid++) {
         worker_set[tid].init(w_size, y_size, param);
         model_set[tid].reshape(w_size + (param->bias > 0), nr_labels);
+        alpha_set[tid].reshape(y_size, nr_labels);
     }
 
     std::vector<svm_job_t> job_queue;
@@ -847,15 +855,24 @@ void multilabel_train_with_codes(
         int tid = omp_get_thread_num();
         auto& worker = worker_set[tid];
         auto& local_model = model_set[tid];
+        auto& local_alpha = alpha_set[tid];
+
         const auto& job = job_queue[job_id];
         job.init_worker(worker);
-        job.solve(worker, local_model, threshold, max_nonzeros_per_label);
+        job.solve(worker, local_model, local_alpha, threshold, max_nonzeros_per_label);
         job.reset_worker(worker);
     }
+    
     model->reshape(w_size + (param->bias > 0), nr_labels);
     model->swap(model_set[0]);
     for(int tid = 1; tid < threads; tid++) {
         model->extends(model_set[tid]);
+    }
+    // for alphas
+    alphas->reshape(y_size, nr_labels);
+    alphas->swap(alpha_set[0]);
+    for(int tid = 1; tid < threads; tid++) {
+        alphas->extends(alpha_set[tid]);
     }
 }
 

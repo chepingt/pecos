@@ -659,7 +659,7 @@ class MLModel(pecos.BaseClass):
             """Check whether self instance is valid"""
             return self.post_processor in PostProcessor.valid_list()
 
-    def __init__(self, W, C=None, bias=-1.0, pred_params=None, **kwargs):
+    def __init__(self, W, C=None, bias=-1.0, pred_params=None, alpha = None, M = None, Y = None, **kwargs):
         """Initialization
 
         Args:
@@ -678,6 +678,10 @@ class MLModel(pecos.BaseClass):
             C = smat.csc_matrix(np.ones((W.shape[1], 1), dtype=W.dtype))
         self.pC = ScipyCscF32.init_from(C)
         self.pW = ScipyCscF32.init_from(W)
+        self.pAlpha = ScipyCscF32.init_from(alpha)
+        self.pM = ScipyCscF32.init_from(M)
+        self.pY = ScipyCscF32.init_from(Y)
+        
         self.bias = bias
         pred_params = self.PredParams.from_dict(pred_params)
         pred_params.override_with_kwargs(kwargs.get("pred_kwargs", None))
@@ -693,6 +697,20 @@ class MLModel(pecos.BaseClass):
         """The weight matrix"""
         return None if self.pW is None else self.pW.buf
 
+    @property
+    def alpha(self):
+        """Alpha"""
+        return None if self.pAlpha is None else self.pAlpha.buf
+    
+    @property
+    def M(self):
+        """M"""
+        return None if self.pM is None else self.pM.buf
+    
+    def Y(self):
+        """Y"""
+        return None if self.pY is None else self.pY.buf
+    
     @property
     def nr_labels(self):
         """The number of labels"""
@@ -768,6 +786,9 @@ class MLModel(pecos.BaseClass):
             f.write(json.dumps(param, indent=True))
         smat_util.save_matrix("{}/W.npz".format(folder), self.W)
         smat_util.save_matrix("{}/C.npz".format(folder), self.C)
+        smat_util.save_matrix("{}/alpha.npz".format(folder), self.alpha)
+        smat_util.save_matrix("{}/M.npz".format(folder), self.M)
+        smat_util.save_matrix("{}/Y.npz".format(folder), self.Y)
 
     @classmethod
     def train(cls, prob, train_params=None, pred_params=None, **kwargs):
@@ -796,7 +817,7 @@ class MLModel(pecos.BaseClass):
         if train_params.solver_type == "L2R_L2LOSS_SVC_PRIMAL":
             train_params.eps = train_params.newton_eps
 
-        model = clib.xlinear_single_layer_train(
+        model, alpha = clib.xlinear_single_layer_train(
             prob.pX,
             prob.pY,
             prob.pC,
@@ -804,7 +825,7 @@ class MLModel(pecos.BaseClass):
             prob.pR,
             **train_params.to_dict(),
         )
-        return cls(model, prob.pC, train_params.bias, pred_params)
+        return cls(model, prob.pC, train_params.bias, pred_params, alpha, prob.pM, prob.pY)
 
     def get_pred_params(self):
         """Return a deep copy of prediction parameters

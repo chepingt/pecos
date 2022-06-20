@@ -523,6 +523,7 @@ class corelib(object):
             POINTER(ScipyCscF32),  # CSC M
             POINTER(ScipyCscF32),  # CSC R
             ScipyCoordinateSparseAllocator.CFUNCTYPE,  # py_coo_allocator
+            ScipyCoordinateSparseAllocator.CFUNCTYPE,  # py_coo_allocator for alpha
             c_double,  # threshold
             c_uint32,  # max_nonzeros_per_label
             c_int,  # solver_type
@@ -1020,6 +1021,7 @@ class corelib(object):
         """
         clib = self.clib_float32
         coo_alloc = ScipyCoordinateSparseAllocator(dtype=np.float32)
+        coo_alloc_alpha = ScipyCoordinateSparseAllocator(dtype=np.float32)
         if isinstance(pX, ScipyCsrF32):
             c_xlinear_single_layer_train = clib.c_xlinear_single_layer_train_csr_f32
         elif isinstance(pX, ScipyDrmF32):
@@ -1034,6 +1036,7 @@ class corelib(object):
             byref(pM) if pM is not None else None,
             byref(pR) if pR is not None else None,
             coo_alloc.cfunc,
+            coo_alloc_alpha.cfunc,
             threshold,
             0 if max_nonzeros_per_label is None else max_nonzeros_per_label,
             XLINEAR_SOLVERS[solver_type],
@@ -1044,7 +1047,7 @@ class corelib(object):
             bias,
             threads,
         )
-        return coo_alloc.tocsc().astype(np.float32)
+        return coo_alloc.tocsc().astype(np.float32), coo_alloc_alpha.tocsc().astype(np.float32)
 
     def xlinear_get_int_attr(self, c_model, attr):
         """
